@@ -133,10 +133,12 @@ $("enableNotifications").addEventListener("click", async () => {
 });
 
 let cachedMessages = [];
+let replyTarget = null;
 function renderMessages() {
   const box = $("messages");
   const term = ($("messageSearch")?.value || "").trim().toLocaleLowerCase("pt-BR");
-  const filtered = cachedMessages.filter(item => {
+  const normalMessages = cachedMessages.filter(item => item.data.type !== "reaction");
+  const filtered = normalMessages.filter(item => {
     const d = item.data;
     return !term || String(d.text || "").toLocaleLowerCase("pt-BR").includes(term) ||
       String(d.senderName || d.senderEmail || "").toLocaleLowerCase("pt-BR").includes(term);
@@ -163,6 +165,12 @@ function renderMessages() {
     }
     const bubble = document.createElement("div");
     bubble.className = "bubble" + (data.uid === auth.currentUser?.uid ? " mine" : "");
+    if (data.replyTo) {
+      const quote = document.createElement("div");
+      quote.className = "reply-quote";
+      quote.textContent = "↪ " + (data.replyTo.sender || "Mensagem") + ": " + data.replyTo.text;
+      bubble.append(quote);
+    }
     const body = document.createElement("div");
     const rawText = String(data.text || "");
     const urlPattern = /(https:\/\/[^\s]+|www\.[^\s]+)/gi;
@@ -191,10 +199,48 @@ function renderMessages() {
         copy.textContent = "Não foi possível copiar";
       }
     });
-    bubble.append(body, meta, time, copy); box.append(bubble);
+    const actions = document.createElement("div");
+    actions.className = "message-actions";
+    const reply = document.createElement("button");
+    reply.type = "button"; reply.className = "message-action"; reply.textContent = "Responder";
+    reply.addEventListener("click", () => {
+      const source = cachedMessages.find(item => item.data === data);
+      replyTarget = { id: source?.id || "", sender: data.senderName || data.senderEmail || "Entre Nós", text: String(data.text || "").slice(0,180) };
+      showReplyPreview();
+      $("messageInput").focus();
+    });
+    actions.append(reply);
+    const reactionBar = document.createElement("div");
+    reactionBar.className = "reaction-bar";
+    ["❤️","😂","👍","🥰","🙏"].forEach(emoji => {
+      const reactionButton = document.createElement("button");
+      reactionButton.type = "button"; reactionButton.className = "reaction-button";
+      const source = cachedMessages.find(item => item.data === data);
+      const count = cachedMessages.filter(item => item.data.type === "reaction" && item.data.targetMessageId === source?.id && item.data.emoji === emoji).length;
+      reactionButton.textContent = emoji + (count ? " " + count : "");
+      reactionButton.setAttribute("aria-label", "Reagir com " + emoji);
+      reactionButton.addEventListener("click", async () => {
+        if (!source) return;
+        try {
+          await addDoc(collection(db, "messages"), { type:"reaction", targetMessageId:source.id, emoji, uid:auth.currentUser.uid, senderName:auth.currentUser.email || "Entre Nós", createdAt:serverTimestamp() });
+        } catch (error) { alert("Não foi possível registrar a reação. Confira as permissões do Firestore."); }
+      });
+      reactionBar.append(reactionButton);
+    });
+    actions.append(reactionBar);
+    bubble.append(body, meta, time, copy, actions); box.append(bubble);
   });
   if (!term) box.scrollTop = box.scrollHeight;
 }
+function showReplyPreview() {
+  const preview = $("replyPreview");
+  if (!preview) return;
+  if (!replyTarget) { preview.classList.add("hidden"); preview.textContent = ""; return; }
+  preview.classList.remove("hidden");
+  preview.textContent = "Respondendo a " + replyTarget.sender + ": " + replyTarget.text;
+}
+$("cancelReply")?.addEventListener("click", () => { replyTarget = null; showReplyPreview(); });
+
 function listenMessages() {
   if (stopMessages) stopMessages();
   const q = query(collection(db, "messages"), orderBy("createdAt", "asc"));
@@ -285,10 +331,14 @@ $("messageForm").addEventListener("submit", async event => {
   if (!text || !auth?.currentUser) return;
   const button = $("messageForm").querySelector('button[type="submit"]'); button.disabled = true;
   try {
-    const messageRef = await addDoc(collection(db, "messages"), {
+    const messageData = {
       text, uid: auth.currentUser.uid, senderEmail: auth.currentUser.email || "",
       senderName: auth.currentUser.email || "Entre Nós", createdAt: serverTimestamp()
-    });
+    };
+    if (replyTarget) messageData.replyTo = { id: replyTarget.id, sender: replyTarget.sender, text: replyTarget.text };
+    const messageRef = await addDoc(collection(db, "messages"), messageData);
+    replyTarget = null;
+    showReplyPreview();
     input.value = "";
     saveDraft(auth.currentUser, "");
     updateDraftCounter();
