@@ -79,7 +79,7 @@ $("enableNotifications").addEventListener("click", async () => {
   try {
     if (!("Notification" in window) || !("serviceWorker" in navigator)) throw new Error("Este navegador não oferece suporte a notificações neste modo.");
     const permission = await Notification.requestPermission();
-    if (permission !== "granted") throw new Error("Permissão de notificações não concedida. Verifique os ajustes do navegador.");
+    if (permission !== "granted") throw new Error("O Chrome retornou a permissão: " + permission + ". Estado atual: " + Notification.permission + ". Isso indica que o navegador ainda não autorizou as notificações para este site.");
     const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js");
     if (!messaging) messaging = getMessaging(auth.app);
     const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
