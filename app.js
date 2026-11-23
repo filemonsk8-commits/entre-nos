@@ -271,29 +271,62 @@ if (messagesBox && jumpButton) {
   });
 }
 
-$("exportConversation")?.addEventListener("click", () => {
+function downloadConversation(format) {
   if (!cachedMessages.length) {
     alert("Ainda não há mensagens para exportar.");
     return;
   }
-  const lines = ["ENTRE NÓS — CÓPIA DA CONVERSA", "Exportado em: " + new Date().toLocaleString("pt-BR"), ""];
-  cachedMessages.forEach(({data}) => {
-    const date = data.createdAt?.toDate ? data.createdAt.toDate().toLocaleString("pt-BR") : "Data não disponível";
-    const sender = data.senderName || data.senderEmail || "Entre Nós";
-    lines.push("[" + date + "] " + sender + ":");
-    lines.push(String(data.text || ""));
-    lines.push("");
-  });
-  const blob = new Blob(["\\uFEFF" + lines.join("\\n")], { type: "text/plain;charset=utf-8" });
+  const dateTag = new Date().toISOString().slice(0,10);
+  const messages = cachedMessages.filter(item => item.data.type !== "reaction");
+  const reactions = cachedMessages.filter(item => item.data.type === "reaction");
+  let content, mime, extension;
+  if (format === "json") {
+    const payload = {
+      app: "Entre Nós",
+      exportedAt: new Date().toISOString(),
+      messages: messages.map(({id, data}) => ({
+        id, text: String(data.text || ""),
+        sender: data.senderName || data.senderEmail || "Entre Nós",
+        senderUid: data.uid || null,
+        createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : null,
+        replyTo: data.replyTo || null,
+        reactions: reactions.filter(r => r.data.targetMessageId === id).map(r => ({
+          emoji: r.data.emoji, sender: r.data.senderName || "Entre Nós",
+          uid: r.data.uid || null
+        }))
+      }))
+    };
+    content = JSON.stringify(payload, null, 2);
+    mime = "application/json;charset=utf-8";
+    extension = "json";
+  } else {
+    const lines = ["ENTRE NÓS — CÓPIA DA CONVERSA", "Exportado em: " + new Date().toLocaleString("pt-BR"), ""];
+    messages.forEach(({id, data}) => {
+      const date = data.createdAt?.toDate ? data.createdAt.toDate().toLocaleString("pt-BR") : "Data não disponível";
+      const sender = data.senderName || data.senderEmail || "Entre Nós";
+      lines.push("[" + date + "] " + sender + ":");
+      if (data.replyTo) lines.push("  ↪ Respondendo a " + data.replyTo.sender + ": " + data.replyTo.text);
+      lines.push(String(data.text || ""));
+      const related = reactions.filter(r => r.data.targetMessageId === id);
+      if (related.length) lines.push("  Reações: " + related.map(r => r.data.emoji).join(" "));
+      lines.push("");
+    });
+    content = "\uFEFF" + lines.join("\n");
+    mime = "text/plain;charset=utf-8";
+    extension = "txt";
+  }
+  const blob = new Blob([content], { type: mime });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "entre-nos-conversa-" + new Date().toISOString().slice(0,10) + ".txt";
+  link.download = "entre-nos-conversa-" + dateTag + "." + extension;
   document.body.append(link);
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-});
+}
+$("exportConversation")?.addEventListener("click", () => downloadConversation("txt"));
+$("exportJson")?.addEventListener("click", () => downloadConversation("json"));
 
 function updateConnectionStatus() {
   const el = $("connectionStatus");
