@@ -119,11 +119,25 @@ $("messageForm").addEventListener("submit", async event => {
   if (!text || !auth?.currentUser) return;
   const button = $("messageForm").querySelector("button"); button.disabled = true;
   try {
-    await addDoc(collection(db, "messages"), {
+    const messageRef = await addDoc(collection(db, "messages"), {
       text, uid: auth.currentUser.uid, senderEmail: auth.currentUser.email || "",
       senderName: auth.currentUser.email || "Entre Nós", createdAt: serverTimestamp()
     });
     $("messageInput").value = "";
+    try {
+      const idToken = await auth.currentUser.getIdToken();
+      const notificationResponse = await fetch("https://entre-nos-notificacoes.filemonsk8.workers.dev/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken, messageId: messageRef.id })
+      });
+      if (!notificationResponse.ok) {
+        const notificationError = await notificationResponse.json().catch(() => ({}));
+        console.warn("Mensagem enviada, mas a notificação não foi enviada:", notificationError.error || notificationResponse.status);
+      }
+    } catch (notificationError) {
+      console.warn("Mensagem enviada, mas não foi possível conectar ao serviço de notificações.", notificationError);
+    }
   } catch (error) { alert("Não foi possível enviar. Confira a configuração e as regras do Firestore."); }
   finally { button.disabled = false; }
 });
