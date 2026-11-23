@@ -6,7 +6,7 @@ import { firebaseConfig } from "./firebase-config.js";
 const configured = firebaseConfig.apiKey !== "COLE_SUA_API_KEY" && firebaseConfig.projectId !== "SEU_PROJECT_ID";
 const $ = (id) => document.getElementById(id);
 const authView = $("authView"), chatView = $("chatView"), pendingView = $("pendingView"), authStatus = $("authStatus");
-const approvedUids = ["7XPrjKOzd7czUWdFwPLdPI63Hwu2"];
+const approvedUids = ["7XPrjKOzd7czUWdFwPLdPI63Hwu2", "3E0MnEx8kwclQ7sajJndriPJpZ62"];
 let signupMode = false;
 let auth, db, stopMessages;
 
