@@ -12,6 +12,12 @@ const vapidKey = "BA1o3SI2iCWEiAqyOf8EjoX4bBVDQQdakDYhd8O_k99BpYH8dq-ogPwjmUGciS
 let signupMode = false;
 let auth, db, stopMessages, messaging;
 
+function displayName(uid) {
+  if (uid === "7XPrjKOzd7czUWdFwPLdPI63Hwu2") return "Eduardo";
+  if (uid === "3E0MnEx8kwclQ7sajJndriPJpZ62") return "Nádia";
+  return "Entre Nós";
+}
+
 if (configured) {
   const app = initializeApp(firebaseConfig);
   auth = getAuth(app);
@@ -23,7 +29,7 @@ if (configured) {
     chatView.classList.toggle("hidden", !approved);
     pendingView.classList.toggle("hidden", !user || approved);
     if (approved) {
-      $("userLabel").textContent = user.email || "Conectado";
+      $("userLabel").textContent = displayName(user.uid) + " • Conectado";
       $("enableNotifications").classList.remove("hidden");
       refreshNotificationStatus(user);
       restoreDraft(user);
@@ -184,7 +190,7 @@ function renderMessages() {
       body.append(anchor); lastIndex = urlPattern.lastIndex;
     }
     body.append(document.createTextNode(rawText.slice(lastIndex)));
-    const meta = document.createElement("small"); meta.textContent = data.senderName || data.senderEmail || "Entre Nós";
+    const meta = document.createElement("small"); meta.textContent = displayName(data.uid);
     const time = document.createElement("small");
     if (data.createdAt?.toDate) time.textContent = data.createdAt.toDate().toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
     const copy = document.createElement("button");
@@ -205,7 +211,7 @@ function renderMessages() {
     reply.type = "button"; reply.className = "message-action"; reply.textContent = "Responder";
     reply.addEventListener("click", () => {
       const source = cachedMessages.find(item => item.data === data);
-      replyTarget = { id: source?.id || "", sender: data.senderName || data.senderEmail || "Entre Nós", text: String(data.text || "").slice(0,180) };
+      replyTarget = { id: source?.id || "", sender: displayName(data.uid), text: String(data.text || "").slice(0,180) };
       showReplyPreview();
       $("messageInput").focus();
     });
@@ -373,7 +379,7 @@ $("messageForm").addEventListener("submit", async event => {
   try {
     const messageData = {
       text, uid: auth.currentUser.uid, senderEmail: auth.currentUser.email || "",
-      senderName: auth.currentUser.email || "Entre Nós", createdAt: serverTimestamp()
+      senderName: displayName(auth.currentUser.uid), createdAt: serverTimestamp()
     };
     if (replyTarget) messageData.replyTo = { id: replyTarget.id, sender: replyTarget.sender, text: replyTarget.text };
     const messageRef = await addDoc(collection(db, "messages"), messageData);
