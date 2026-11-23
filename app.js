@@ -12,11 +12,27 @@ const vapidKey = "BA1o3SI2iCWEiAqyOf8EjoX4bBVDQQdakDYhd8O_k99BpYH8dq-ogPwjmUGciS
 let signupMode = false;
 let auth, db, stopMessages, messaging;
 
+function applyThemePreference() {
+  const saved = localStorage.getItem("entre-nos-theme") || "dark";
+  document.documentElement.dataset.theme = saved;
+  const button = $("themeToggle");
+  if (button) {
+    button.textContent = saved === "light" ? "☾ Tema escuro" : "☀ Tema claro";
+    button.setAttribute("aria-pressed", String(saved === "light"));
+  }
+}
 function displayName(uid) {
   if (uid === "7XPrjKOzd7czUWdFwPLdPI63Hwu2") return "Eduardo";
   if (uid === "3E0MnEx8kwclQ7sajJndriPJpZ62") return "Nádia";
   return "Entre Nós";
 }
+
+applyThemePreference();
+$("themeToggle")?.addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+  localStorage.setItem("entre-nos-theme", next);
+  applyThemePreference();
+});
 
 if (configured) {
   const app = initializeApp(firebaseConfig);
