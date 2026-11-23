@@ -150,10 +150,32 @@ function renderMessages() {
     const empty = document.createElement("div"); empty.className = "empty";
     empty.textContent = "Nenhuma mensagem encontrada para essa busca."; box.append(empty); return;
   }
+  let previousDay = "";
   filtered.forEach(({data}) => {
+    const date = data.createdAt?.toDate ? data.createdAt.toDate() : null;
+    const dayKey = date ? date.toLocaleDateString("pt-BR") : "";
+    if (dayKey && dayKey !== previousDay) {
+      const separator = document.createElement("div");
+      separator.className = "date-separator";
+      separator.textContent = date.toLocaleDateString("pt-BR", { weekday:"long", day:"2-digit", month:"long", year:"numeric" });
+      box.append(separator);
+      previousDay = dayKey;
+    }
     const bubble = document.createElement("div");
     bubble.className = "bubble" + (data.uid === auth.currentUser?.uid ? " mine" : "");
-    const body = document.createElement("div"); body.textContent = data.text || "";
+    const body = document.createElement("div");
+    const rawText = String(data.text || "");
+    const urlPattern = /(https:\/\/[^\s]+|www\.[^\s]+)/gi;
+    let lastIndex = 0, match;
+    while ((match = urlPattern.exec(rawText)) !== null) {
+      body.append(document.createTextNode(rawText.slice(lastIndex, match.index)));
+      const anchor = document.createElement("a");
+      const href = match[0].startsWith("www.") ? "https://" + match[0] : match[0];
+      anchor.href = href; anchor.textContent = match[0];
+      anchor.target = "_blank"; anchor.rel = "noopener noreferrer";
+      body.append(anchor); lastIndex = urlPattern.lastIndex;
+    }
+    body.append(document.createTextNode(rawText.slice(lastIndex)));
     const meta = document.createElement("small"); meta.textContent = data.senderName || data.senderEmail || "Entre Nós";
     const time = document.createElement("small");
     if (data.createdAt?.toDate) time.textContent = data.createdAt.toDate().toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
