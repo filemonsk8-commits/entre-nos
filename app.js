@@ -23,8 +23,10 @@ function applyThemePreference() {
 }
 function loadProfilePhoto() {
   const user = auth?.currentUser;
-  const avatar = $("profileAvatar");
+  const avatar = $("profilePhotoButton");
   if (!user || !avatar) return;
+  const name = $("profileName");
+  if (name) name.textContent = displayName(user.uid);
   const saved = localStorage.getItem("entre-nos-avatar-" + user.uid);
   avatar.style.backgroundImage = saved ? `url("${saved}")` : "";
   avatar.classList.toggle("has-photo", !!saved);
