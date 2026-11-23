@@ -26,6 +26,7 @@ if (configured) {
       $("userLabel").textContent = user.email || "Conectado";
       $("enableNotifications").classList.remove("hidden");
       refreshNotificationStatus(user);
+      restoreDraft(user);
       listenMessages();
     } else {
       if (stopMessages) { stopMessages(); stopMessages = null; }
@@ -221,15 +222,18 @@ if (emojiButton && emojiPicker) {
 }
 
 $("messageForm").addEventListener("submit", async event => {
-  event.preventDefault(); const text = $("messageInput").value.trim();
+  event.preventDefault(); const input = $("messageInput"); const text = input.value.trim();
   if (!text || !auth?.currentUser) return;
-  const button = $("messageForm").querySelector("button"); button.disabled = true;
+  const button = $("messageForm").querySelector('button[type="submit"]'); button.disabled = true;
   try {
     const messageRef = await addDoc(collection(db, "messages"), {
       text, uid: auth.currentUser.uid, senderEmail: auth.currentUser.email || "",
       senderName: auth.currentUser.email || "Entre Nós", createdAt: serverTimestamp()
     });
-    $("messageInput").value = "";
+    input.value = "";
+    saveDraft(auth.currentUser, "");
+    updateDraftCounter();
+    input.style.height = "auto";
     try {
       const idToken = await auth.currentUser.getIdToken();
       const notificationResponse = await fetch("https://entre-nos-notificacoes.filemonsk8.workers.dev/", {
@@ -246,6 +250,39 @@ $("messageForm").addEventListener("submit", async event => {
     }
   } catch (error) { alert("Não foi possível enviar. Confira a configuração e as regras do Firestore."); }
   finally { button.disabled = false; }
+});
+
+function draftKey(user) { return "entre-nos-draft-" + user.uid; }
+function saveDraft(user, value) {
+  if (!user) return;
+  try { localStorage.setItem(draftKey(user), value); } catch {}
+}
+function restoreDraft(user) {
+  const input = $("messageInput");
+  try { input.value = localStorage.getItem(draftKey(user)) || ""; } catch { input.value = ""; }
+  updateDraftCounter();
+  resizeComposer();
+}
+function updateDraftCounter() {
+  const counter = $("draftCounter"), input = $("messageInput");
+  if (counter && input) counter.textContent = input.value.length.toLocaleString("pt-BR") + "/4000";
+}
+function resizeComposer() {
+  const input = $("messageInput");
+  if (!input) return;
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 150) + "px";
+}
+$("messageInput")?.addEventListener("input", () => {
+  if (auth?.currentUser) saveDraft(auth.currentUser, $("messageInput").value);
+  updateDraftCounter();
+  resizeComposer();
+});
+$("messageInput")?.addEventListener("keydown", event => {
+  if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+    event.preventDefault();
+    $("messageForm").requestSubmit();
+  }
 });
 
 function friendlyError(error) {
