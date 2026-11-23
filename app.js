@@ -1,19 +1,22 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
+import { getMessaging, getToken, onMessage, isSupported } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-messaging.js";
 import { firebaseConfig } from "./firebase-config.js";
 
 const configured = firebaseConfig.apiKey !== "COLE_SUA_API_KEY" && firebaseConfig.projectId !== "SEU_PROJECT_ID";
 const $ = (id) => document.getElementById(id);
 const authView = $("authView"), chatView = $("chatView"), pendingView = $("pendingView"), authStatus = $("authStatus");
 const approvedUids = ["7XPrjKOzd7czUWdFwPLdPI63Hwu2", "3E0MnEx8kwclQ7sajJndriPJpZ62"];
+const vapidKey = "BA1o3SI2iCWEiAqyOf8EjoX4bBVDQQdakDYhd8O_k99BpYH8dq-ogPwjmUGciSun5I2Jkeg7l-WOO2lU8bsgorc";
 let signupMode = false;
-let auth, db, stopMessages;
+let auth, db, stopMessages, messaging;
 
 if (configured) {
   const app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
+  isSupported().then(supported => { if (supported) { messaging = getMessaging(app); onMessage(messaging, payload => { if (Notification.permission === "granted") new Notification(payload.notification?.title || "Entre Nós", { body: payload.notification?.body || "Você recebeu uma nova mensagem.", icon: "./icon.svg" }); }); } }).catch(() => {});
   onAuthStateChanged(auth, user => {
     const approved = !!user && approvedUids.includes(user.uid);
     authView.classList.toggle("hidden", !!user);
@@ -21,9 +24,11 @@ if (configured) {
     pendingView.classList.toggle("hidden", !user || approved);
     if (approved) {
       $("userLabel").textContent = user.email || "Conectado";
+      $("enableNotifications").classList.remove("hidden");
       listenMessages();
     } else {
       if (stopMessages) { stopMessages(); stopMessages = null; }
+      $("enableNotifications").classList.add("hidden");
       if (user) $("pendingUid").textContent = user.uid;
     }
   });
@@ -67,6 +72,25 @@ $("copyUid").addEventListener("click", async () => {
 });
 
 $("logoutButton").addEventListener("click", () => signOut(auth));
+
+$("enableNotifications").addEventListener("click", async () => {
+  const button = $("enableNotifications");
+  button.disabled = true; button.textContent = "Ativando...";
+  try {
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) throw new Error("Este navegador não oferece suporte a notificações neste modo.");
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") throw new Error("Permissão de notificações não concedida. Verifique os ajustes do navegador.");
+    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js");
+    if (!messaging) messaging = getMessaging(auth.app);
+    const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
+    if (!token) throw new Error("Não foi possível gerar o token de notificações.");
+    await setDoc(doc(db, "pushTokens", auth.currentUser.uid), { token, uid: auth.currentUser.uid, updatedAt: serverTimestamp() });
+    button.textContent = "Notificações ativadas ✓";
+  } catch (error) {
+    button.disabled = false; button.textContent = "Ativar notificações";
+    alert(error.message || "Não foi possível ativar as notificações.");
+  }
+});
 
 function listenMessages() {
   if (stopMessages) stopMessages();
