@@ -25,6 +25,7 @@ if (configured) {
     if (approved) {
       $("userLabel").textContent = user.email || "Conectado";
       $("enableNotifications").classList.remove("hidden");
+      refreshNotificationStatus(user);
       listenMessages();
     } else {
       if (stopMessages) { stopMessages(); stopMessages = null; }
@@ -73,21 +74,59 @@ $("copyUid").addEventListener("click", async () => {
 
 $("logoutButton").addEventListener("click", () => signOut(auth));
 
+async function saveNotificationToken(user) {
+  if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+    throw new Error("Este navegador não oferece suporte a notificações neste modo.");
+  }
+  const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js");
+  if (!messaging) messaging = getMessaging(auth.app);
+  const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
+  if (!token) throw new Error("Não foi possível gerar o token de notificações.");
+  await setDoc(doc(db, "pushTokens", user.uid), {
+    token, uid: user.uid, updatedAt: serverTimestamp()
+  });
+}
+
+async function refreshNotificationStatus(user) {
+  const button = $("enableNotifications");
+  if (!("Notification" in window)) return;
+  if (Notification.permission === "granted") {
+    button.disabled = true;
+    button.textContent = "Verificando notificações...";
+    try {
+      await saveNotificationToken(user);
+      button.textContent = "Notificações ativadas ✓";
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = "Tentar ativar novamente";
+      console.warn("Não foi possível atualizar o token de notificações:", error);
+    }
+  } else if (Notification.permission === "denied") {
+    button.disabled = true;
+    button.textContent = "Permita notificações nas configurações do navegador";
+  } else {
+    button.disabled = false;
+    button.textContent = "Ativar notificações";
+  }
+}
+
 $("enableNotifications").addEventListener("click", async () => {
   const button = $("enableNotifications");
-  button.disabled = true; button.textContent = "Ativando...";
+  button.disabled = true;
+  button.textContent = "Ativando...";
   try {
-    if (!("Notification" in window) || !("serviceWorker" in navigator)) throw new Error("Este navegador não oferece suporte a notificações neste modo.");
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+      throw new Error("Este navegador não oferece suporte a notificações neste modo.");
+    }
     const permission = await Notification.requestPermission();
-    if (permission !== "granted") throw new Error("O Chrome retornou a permissão: " + permission + ". Estado atual: " + Notification.permission + ". Isso indica que o navegador ainda não autorizou as notificações para este site.");
-    const registration = await navigator.serviceWorker.register("./firebase-messaging-sw.js");
-    if (!messaging) messaging = getMessaging(auth.app);
-    const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
-    if (!token) throw new Error("Não foi possível gerar o token de notificações.");
-    await setDoc(doc(db, "pushTokens", auth.currentUser.uid), { token, uid: auth.currentUser.uid, updatedAt: serverTimestamp() });
+    if (permission !== "granted") {
+      throw new Error("A permissão atual é: " + permission + ". Verifique as permissões do site no navegador.");
+    }
+    await saveNotificationToken(auth.currentUser);
     button.textContent = "Notificações ativadas ✓";
   } catch (error) {
-    button.disabled = false; button.textContent = "Ativar notificações";
+    button.disabled = false;
+    button.textContent = "Ativar notificações";
     alert(error.message || "Não foi possível ativar as notificações.");
   }
 });
