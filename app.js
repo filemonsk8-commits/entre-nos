@@ -11,7 +11,25 @@ const approvedUids = ["7XPrjKOzd7czUWdFwPLdPI63Hwu2", "3E0MnEx8kwclQ7sajJndriPJp
 const vapidKey = "BA1o3SI2iCWEiAqyOf8EjoX4bBVDQQdakDYhd8O_k99BpYH8dq-ogPwjmUGciSun5I2Jkeg7l-WOO2lU8bsgorc";
 let signupMode = false;
 let auth, db, stopMessages, messaging;
+let soundEnabled = false, soundContext = null, initialMessagesLoaded = false;
 
+function loadSoundPreference(user) {
+  soundEnabled = localStorage.getItem("entre-nos-sound-" + user.uid) === "on";
+  const button = $("soundToggle");
+  if (button) { button.textContent = soundEnabled ? "♫ Som ligado" : "♫ Som desligado"; button.setAttribute("aria-pressed", String(soundEnabled)); }
+}
+function playIncomingSound() {
+  if (!soundEnabled || !soundContext || soundContext.state !== "running") return;
+  const oscillator = soundContext.createOscillator();
+  const gain = soundContext.createGain();
+  oscillator.type = "sine"; oscillator.frequency.setValueAtTime(660, soundContext.currentTime);
+  oscillator.frequency.setValueAtTime(880, soundContext.currentTime + 0.10);
+  gain.gain.setValueAtTime(0.0001, soundContext.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.12, soundContext.currentTime + 0.025);
+  gain.gain.exponentialRampToValueAtTime(0.0001, soundContext.currentTime + 0.24);
+  oscillator.connect(gain); gain.connect(soundContext.destination);
+  oscillator.start(); oscillator.stop(soundContext.currentTime + 0.25);
+}
 function applyThemePreference() {
   const saved = localStorage.getItem("entre-nos-theme") || "dark";
   document.documentElement.dataset.theme = saved;
@@ -83,6 +101,7 @@ if (configured) {
       restoreDraft(user);
       loadFavorites();
       loadProfilePhoto();
+      loadSoundPreference(user);
       listenMessages();
     } else {
       if (stopMessages) { stopMessages(); stopMessages = null; }
@@ -373,11 +392,32 @@ function showReplyPreview() {
   preview.append(label, cancel);
 }
 
+$("soundToggle")?.addEventListener("click", async () => {
+  const user = auth?.currentUser;
+  if (!user) return;
+  soundEnabled = !soundEnabled;
+  localStorage.setItem("entre-nos-sound-" + user.uid, soundEnabled ? "on" : "off");
+  if (soundEnabled) {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass) { soundContext ||= new AudioContextClass(); await soundContext.resume(); }
+    } catch {}
+  }
+  loadSoundPreference(user);
+});
+
 function listenMessages() {
   if (stopMessages) stopMessages();
+  initialMessagesLoaded = false;
   const q = query(collection(db, "messages"), orderBy("createdAt", "asc"));
   stopMessages = onSnapshot(q, snapshot => {
-    cachedMessages = snapshot.docs.map(docSnap => ({ id: docSnap.id, data: docSnap.data() }));
+    const nextMessages = snapshot.docs.map(docSnap => ({ id: docSnap.id, data: docSnap.data() }));
+    if (initialMessagesLoaded) {
+      const known = new Set(cachedMessages.map(item => item.id));
+      if (nextMessages.some(item => !known.has(item.id) && item.data.type !== "reaction" && item.data.uid !== auth.currentUser?.uid)) playIncomingSound();
+    }
+    cachedMessages = nextMessages;
+    initialMessagesLoaded = true;
     renderMessages();
   }, error => { $("messages").textContent = "Não foi possível carregar as mensagens. Verifique as regras do Firestore."; });
 }
