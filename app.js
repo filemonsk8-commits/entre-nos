@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
 import { getMessaging, getToken, onMessage, isSupported } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-messaging.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -183,7 +183,7 @@ function renderMessages() {
     empty.textContent = "Nenhuma mensagem encontrada para essa busca."; box.append(empty); return;
   }
   let previousDay = "";
-  filtered.forEach(({data}) => {
+  filtered.forEach(({id, data}) => {
     const date = data.createdAt?.toDate ? data.createdAt.toDate() : null;
     const dayKey = date ? date.toLocaleDateString("pt-BR") : "";
     if (dayKey && dayKey !== previousDay) {
@@ -217,6 +217,7 @@ function renderMessages() {
     const meta = document.createElement("small"); meta.textContent = displayName(data.uid);
     const time = document.createElement("small");
     if (data.createdAt?.toDate) time.textContent = data.createdAt.toDate().toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
+    if (data.editedAt) time.textContent += " · editada";
     const copy = document.createElement("button");
     copy.type = "button"; copy.className = "copy-message"; copy.textContent = "Copiar";
     copy.setAttribute("aria-label", "Copiar esta mensagem");
@@ -240,7 +241,37 @@ function renderMessages() {
       $("messageInput").focus();
     });
     actions.append(reply);
-    const sourceForFavorite = cachedMessages.find(item => item.data === data);
+    if (data.uid === auth.currentUser?.uid && data.type !== "reaction") {
+      const edit = document.createElement("button");
+      edit.type = "button"; edit.className = "message-action"; edit.textContent = "Editar";
+      edit.addEventListener("click", async () => {
+        const revised = window.prompt("Edite sua mensagem:", String(data.text || ""));
+        if (revised === null) return;
+        const clean = revised.trim();
+        if (!clean) { alert("A mensagem não pode ficar vazia."); return; }
+        if (clean.length > 4000) { alert("A mensagem ultrapassa 4.000 caracteres."); return; }
+        if (clean === String(data.text || "")) return;
+        try {
+          await updateDoc(doc(db, "messages", id), { text: clean, editedAt: serverTimestamp() });
+        } catch (error) {
+          alert("Não foi possível editar. As regras atuais do Firestore podem não permitir alterações.");
+        }
+      });
+      const remove = document.createElement("button");
+      remove.type = "button"; remove.className = "message-action"; remove.textContent = "Apagar";
+      remove.addEventListener("click", async () => {
+        if (!window.confirm("Apagar esta mensagem? Essa ação não pode ser desfeita.")) return;
+        try {
+          await deleteDoc(doc(db, "messages", id));
+          favoriteIds.delete(id);
+          saveFavorites();
+        } catch (error) {
+          alert("Não foi possível apagar. As regras atuais do Firestore podem não permitir exclusões.");
+        }
+      });
+      actions.append(edit, remove);
+    }
+    const sourceForFavorite = { id, data };
     const favorite = document.createElement("button");
     favorite.type = "button";
     favorite.className = "message-action";
