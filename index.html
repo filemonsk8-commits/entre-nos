@@ -25,14 +25,23 @@
   <main class="shell">
     <header class="brand"><div class="mark">♡</div><div><h1>Entre Nós</h1><p>Um mundo só nosso.</p></div></header>
     <section id="authView" class="card auth">
-      <h2>Que bom ter você aqui.</h2><p class="sub">Entre no espaço privado de vocês dois.</p>
+      <h2 id="authHeading">Que bom ter você aqui.</h2><p class="sub" id="authSubtitle">Entre no espaço privado de vocês dois.</p>
       <form id="loginForm">
         <div class="field"><label for="email">E-mail</label><input id="email" type="email" autocomplete="username" placeholder="seu@email.com" required></div>
         <div class="field"><label for="password">Senha</label><input id="password" type="password" autocomplete="current-password" placeholder="Sua senha" required></div>
         <button class="primary" id="loginButton">Entrar</button>
       </form>
+      <button type="button" class="logout" id="signupToggle" style="width:100%;margin-top:12px">Primeiro acesso? Criar conta</button>
       <div class="status" id="authStatus" role="status">Aguardando configuração do Firebase.</div>
-      <p class="notice">Acesso reservado a Eduardo e Nádia. O cadastro e os convites serão liberados somente após configurar as regras de segurança.</p>
+      <p class="notice">Novas contas ficam sem acesso às conversas até serem aprovadas pelo responsável.</p>
+    </section>
+    <section id="pendingView" class="card auth hidden">
+      <h2>Cadastro recebido 💙</h2>
+      <p class="sub">Sua conta foi criada, mas ainda precisa ser autorizada para entrar na conversa.</p>
+      <p class="notice">Envie este código ao Eduardo para que ele possa liberar seu acesso:</p>
+      <div id="pendingUid" style="padding:14px;background:#0b1422;border:1px solid var(--line);border-radius:12px;overflow-wrap:anywhere;font-size:13px"></div>
+      <button class="primary" id="copyUid" type="button" style="margin-top:12px">Copiar código</button>
+      <button class="logout" id="pendingLogout" type="button" style="width:100%;margin-top:12px">Sair</button>
     </section>
     <section id="chatView" class="card chat hidden">
       <aside class="side"><h2>Nosso espaço</h2><div class="profile"><div class="avatar">♡</div><div><strong>Entre Nós</strong><small>Conexão particular</small></div></div><p class="side-note">Um lugar para conversar, guardar lembranças e estar pertinho, mesmo à distância.</p></aside>
