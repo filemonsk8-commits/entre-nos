@@ -88,6 +88,13 @@ if (configured) {
   const app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
+  // Registra o service worker também quando o usuário ainda não ativou push.
+  // Assim o shell do PWA pode ser atualizado e armazenado para abertura básica offline.
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("./firebase-messaging-sw.js")
+      .then(registration => { if (navigator.onLine) registration.update().catch(() => {}); })
+      .catch(error => console.warn("Não foi possível registrar o service worker:", error));
+  }
   isSupported().then(supported => { if (supported) { messaging = getMessaging(app); onMessage(messaging, payload => { if (Notification.permission === "granted") new Notification(payload.notification?.title || "Entre Nós", { body: payload.notification?.body || "Você recebeu uma nova mensagem.", icon: "./icon.svg" }); }); } }).catch(() => {});
   onAuthStateChanged(auth, user => {
     const approved = !!user && approvedUids.includes(user.uid);
