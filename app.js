@@ -520,6 +520,8 @@ function updateConnectionStatus() {
   const online = navigator.onLine;
   el.textContent = online ? "Conectado à internet" : "Sem internet";
   el.classList.toggle("offline", !online);
+  if (!online) setSendStatus("Sem internet. Seus rascunhos continuam salvos neste aparelho.", "warning");
+  else if ($("sendStatus")?.dataset.state === "warning") setSendStatus("Conexão restabelecida. Você já pode enviar mensagens.", "success");
 }
 window.addEventListener("online", updateConnectionStatus);
 window.addEventListener("offline", updateConnectionStatus);
@@ -552,10 +554,24 @@ if (emojiButton && emojiPicker) {
   });
 }
 
+function setSendStatus(message, state = "info") {
+  const status = $("sendStatus");
+  if (!status) return;
+  status.textContent = message;
+  status.dataset.state = state;
+}
 $("messageForm").addEventListener("submit", async event => {
-  event.preventDefault(); const input = $("messageInput"); const text = input.value.trim();
+  event.preventDefault();
+  const input = $("messageInput");
+  const text = input.value.trim();
   if (!text || !auth?.currentUser) return;
-  const button = $("messageForm").querySelector('button[type="submit"]'); button.disabled = true;
+  if (!navigator.onLine) {
+    setSendStatus("Sem internet. Sua mensagem continua aqui; tente novamente quando a conexão voltar.", "warning");
+    return;
+  }
+  const button = $("messageForm").querySelector('button[type="submit"]');
+  button.disabled = true;
+  setSendStatus("Enviando mensagem…", "info");
   try {
     const messageData = {
       text, uid: auth.currentUser.uid, senderEmail: auth.currentUser.email || "",
@@ -569,6 +585,7 @@ $("messageForm").addEventListener("submit", async event => {
     saveDraft(auth.currentUser, "");
     updateDraftCounter();
     input.style.height = "auto";
+    setSendStatus("Mensagem enviada.", "success");
     try {
       const idToken = await auth.currentUser.getIdToken();
       const notificationResponse = await fetch("https://entre-nos-notificacoes.filemonsk8.workers.dev/", {
@@ -579,12 +596,18 @@ $("messageForm").addEventListener("submit", async event => {
       if (!notificationResponse.ok) {
         const notificationError = await notificationResponse.json().catch(() => ({}));
         console.warn("Mensagem enviada, mas a notificação não foi enviada:", notificationError.error || notificationResponse.status);
+        setSendStatus("Mensagem enviada. A notificação não pôde ser confirmada.", "warning");
       }
     } catch (notificationError) {
       console.warn("Mensagem enviada, mas não foi possível conectar ao serviço de notificações.", notificationError);
+      setSendStatus("Mensagem enviada. Não foi possível confirmar a notificação.", "warning");
     }
-  } catch (error) { alert("Não foi possível enviar. Confira a configuração e as regras do Firestore."); }
-  finally { button.disabled = false; }
+  } catch (error) {
+    console.warn("Falha ao enviar mensagem:", error);
+    setSendStatus("Não foi possível enviar. O texto foi mantido para você tentar novamente.", "error");
+  } finally {
+    button.disabled = false;
+  }
 });
 
 function draftKey(user) { return "entre-nos-draft-" + user.uid; }
