@@ -21,6 +21,15 @@ function applyThemePreference() {
     button.setAttribute("aria-pressed", String(saved === "light"));
   }
 }
+function loadProfilePhoto() {
+  const user = auth?.currentUser;
+  const avatar = $("profileAvatar");
+  if (!user || !avatar) return;
+  const saved = localStorage.getItem("entre-nos-avatar-" + user.uid);
+  avatar.style.backgroundImage = saved ? `url("${saved}")` : "";
+  avatar.classList.toggle("has-photo", !!saved);
+  avatar.textContent = saved ? "" : "♡";
+}
 function displayName(uid) {
   if (uid === "7XPrjKOzd7czUWdFwPLdPI63Hwu2") return "Eduardo";
   if (uid === "3E0MnEx8kwclQ7sajJndriPJpZ62") return "Nádia";
@@ -28,6 +37,27 @@ function displayName(uid) {
 }
 
 applyThemePreference();
+$("profilePhotoButton")?.addEventListener("click", () => $("profilePhotoInput")?.click());
+$("profilePhotoInput")?.addEventListener("change", async event => {
+  const file = event.target.files?.[0];
+  const user = auth?.currentUser;
+  if (!file || !user) return;
+  if (!file.type.startsWith("image/")) { alert("Escolha um arquivo de imagem."); return; }
+  if (file.size > 8 * 1024 * 1024) { alert("A imagem deve ter até 8 MB."); event.target.value = ""; return; }
+  try {
+    const source = await createImageBitmap(file);
+    const scale = Math.min(1, 320 / Math.max(source.width, source.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(source.width * scale));
+    canvas.height = Math.max(1, Math.round(source.height * scale));
+    canvas.getContext("2d").drawImage(source, 0, 0, canvas.width, canvas.height);
+    const compact = canvas.toDataURL("image/jpeg", 0.78);
+    localStorage.setItem("entre-nos-avatar-" + user.uid, compact);
+    loadProfilePhoto();
+    source.close();
+  } catch { alert("Não foi possível processar essa imagem neste aparelho."); }
+  event.target.value = "";
+});
 $("themeToggle")?.addEventListener("click", () => {
   const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
   localStorage.setItem("entre-nos-theme", next);
@@ -50,6 +80,7 @@ if (configured) {
       refreshNotificationStatus(user);
       restoreDraft(user);
       loadFavorites();
+      loadProfilePhoto();
       listenMessages();
     } else {
       if (stopMessages) { stopMessages(); stopMessages = null; }
