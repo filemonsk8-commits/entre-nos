@@ -131,26 +131,81 @@ $("enableNotifications").addEventListener("click", async () => {
   }
 });
 
+let cachedMessages = [];
+function renderMessages() {
+  const box = $("messages");
+  const term = ($("messageSearch")?.value || "").trim().toLocaleLowerCase("pt-BR");
+  const filtered = cachedMessages.filter(item => {
+    const d = item.data;
+    return !term || String(d.text || "").toLocaleLowerCase("pt-BR").includes(term) ||
+      String(d.senderName || d.senderEmail || "").toLocaleLowerCase("pt-BR").includes(term);
+  });
+  box.innerHTML = "";
+  if (!cachedMessages.length) {
+    const empty = document.createElement("div"); empty.className = "empty";
+    empty.textContent = "Suas conversas aparecerão aqui. Envie a primeira mensagem. 💙"; box.append(empty); return;
+  }
+  if (!filtered.length) {
+    const empty = document.createElement("div"); empty.className = "empty";
+    empty.textContent = "Nenhuma mensagem encontrada para essa busca."; box.append(empty); return;
+  }
+  filtered.forEach(({data}) => {
+    const bubble = document.createElement("div");
+    bubble.className = "bubble" + (data.uid === auth.currentUser?.uid ? " mine" : "");
+    const body = document.createElement("div"); body.textContent = data.text || "";
+    const meta = document.createElement("small"); meta.textContent = data.senderName || data.senderEmail || "Entre Nós";
+    const time = document.createElement("small");
+    if (data.createdAt?.toDate) time.textContent = data.createdAt.toDate().toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
+    bubble.append(body, meta, time); box.append(bubble);
+  });
+  if (!term) box.scrollTop = box.scrollHeight;
+}
 function listenMessages() {
   if (stopMessages) stopMessages();
   const q = query(collection(db, "messages"), orderBy("createdAt", "asc"));
   stopMessages = onSnapshot(q, snapshot => {
-    const box = $("messages"); box.innerHTML = "";
-    if (snapshot.empty) {
-      const empty = document.createElement("div"); empty.className = "empty";
-      empty.textContent = "Suas conversas aparecerão aqui. Envie a primeira mensagem. 💙"; box.append(empty); return;
-    }
-    snapshot.forEach(docSnap => {
-      const data = docSnap.data(), bubble = document.createElement("div");
-      bubble.className = "bubble" + (data.uid === auth.currentUser?.uid ? " mine" : "");
-      const body = document.createElement("div"); body.textContent = data.text || "";
-      const meta = document.createElement("small"); meta.textContent = data.senderName || data.senderEmail || "Entre Nós";
-      const time = document.createElement("small");
-      if (data.createdAt?.toDate) time.textContent = data.createdAt.toDate().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-      bubble.append(body, meta, time); box.append(bubble);
-    });
-    box.scrollTop = box.scrollHeight;
+    cachedMessages = snapshot.docs.map(docSnap => ({ id: docSnap.id, data: docSnap.data() }));
+    renderMessages();
   }, error => { $("messages").textContent = "Não foi possível carregar as mensagens. Verifique as regras do Firestore."; });
+}
+$("messageSearch")?.addEventListener("input", renderMessages);
+
+function updateConnectionStatus() {
+  const el = $("connectionStatus");
+  if (!el) return;
+  const online = navigator.onLine;
+  el.textContent = online ? "Conectado à internet" : "Sem internet";
+  el.classList.toggle("offline", !online);
+}
+window.addEventListener("online", updateConnectionStatus);
+window.addEventListener("offline", updateConnectionStatus);
+updateConnectionStatus();
+
+const emojiButton = $("emojiButton");
+const emojiPicker = $("emojiPicker");
+const emojiList = ["😀","😂","🥰","😍","😘","❤️","💕","💙","💜","💋","😊","😉","🥹","🤗","🌹","✨","🙏","☀️","🌙","☕","🎶","🫶"];
+if (emojiButton && emojiPicker) {
+  emojiList.forEach(emoji => {
+    const item = document.createElement("button");
+    item.type = "button"; item.className = "emoji-choice"; item.textContent = emoji;
+    item.setAttribute("aria-label", "Inserir " + emoji);
+    item.addEventListener("click", () => {
+      const input = $("messageInput");
+      const start = input.selectionStart ?? input.value.length;
+      const end = input.selectionEnd ?? input.value.length;
+      input.value = input.value.slice(0,start) + emoji + input.value.slice(end);
+      input.focus();
+      const cursor = start + emoji.length;
+      input.setSelectionRange(cursor,cursor);
+      emojiPicker.classList.add("hidden");
+      emojiButton.setAttribute("aria-expanded","false");
+    });
+    emojiPicker.append(item);
+  });
+  emojiButton.addEventListener("click", () => {
+    const open = emojiPicker.classList.toggle("hidden") === false;
+    emojiButton.setAttribute("aria-expanded", String(open));
+  });
 }
 
 $("messageForm").addEventListener("submit", async event => {
