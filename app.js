@@ -33,6 +33,7 @@ if (configured) {
       $("enableNotifications").classList.remove("hidden");
       refreshNotificationStatus(user);
       restoreDraft(user);
+      loadFavorites();
       listenMessages();
     } else {
       if (stopMessages) { stopMessages(); stopMessages = null; }
@@ -140,14 +141,28 @@ $("enableNotifications").addEventListener("click", async () => {
 
 let cachedMessages = [];
 let replyTarget = null;
+let favoriteIds = new Set();
+let showOnlyFavorites = false;
+function loadFavorites() {
+  try {
+    const saved = JSON.parse(localStorage.getItem("entre-nos-favorites-" + auth.currentUser.uid) || "[]");
+    favoriteIds = new Set(Array.isArray(saved) ? saved : []);
+  } catch { favoriteIds = new Set(); }
+}
+function saveFavorites() {
+  try {
+    localStorage.setItem("entre-nos-favorites-" + auth.currentUser.uid, JSON.stringify([...favoriteIds]));
+  } catch { alert("Não foi possível salvar as favoritas neste aparelho."); }
+}
 function renderMessages() {
   const box = $("messages");
   const term = ($("messageSearch")?.value || "").trim().toLocaleLowerCase("pt-BR");
   const normalMessages = cachedMessages.filter(item => item.data.type !== "reaction");
   const filtered = normalMessages.filter(item => {
     const d = item.data;
-    return !term || String(d.text || "").toLocaleLowerCase("pt-BR").includes(term) ||
+    const matchesSearch = !term || String(d.text || "").toLocaleLowerCase("pt-BR").includes(term) ||
       String(d.senderName || d.senderEmail || "").toLocaleLowerCase("pt-BR").includes(term);
+    return matchesSearch && (!showOnlyFavorites || favoriteIds.has(item.id));
   });
   box.innerHTML = "";
   if (!cachedMessages.length) {
@@ -216,6 +231,21 @@ function renderMessages() {
       $("messageInput").focus();
     });
     actions.append(reply);
+    const sourceForFavorite = cachedMessages.find(item => item.data === data);
+    const favorite = document.createElement("button");
+    favorite.type = "button";
+    favorite.className = "message-action";
+    const isFavorite = !!sourceForFavorite && favoriteIds.has(sourceForFavorite.id);
+    favorite.textContent = isFavorite ? "★ Favorita" : "☆ Favoritar";
+    favorite.setAttribute("aria-label", isFavorite ? "Remover das favoritas" : "Adicionar às favoritas");
+    favorite.addEventListener("click", () => {
+      if (!sourceForFavorite) return;
+      if (favoriteIds.has(sourceForFavorite.id)) favoriteIds.delete(sourceForFavorite.id);
+      else favoriteIds.add(sourceForFavorite.id);
+      saveFavorites();
+      renderMessages();
+    });
+    actions.append(favorite);
     const reactionBar = document.createElement("div");
     reactionBar.className = "reaction-bar";
     ["❤️","😂","👍","🥰","🙏"].forEach(emoji => {
@@ -238,7 +268,7 @@ function renderMessages() {
     actions.append(reactionBar);
     bubble.append(body, meta, time, copy, actions); box.append(bubble);
   });
-  if (!term) box.scrollTop = box.scrollHeight;
+  if (!term && !showOnlyFavorites) box.scrollTop = box.scrollHeight;
 }
 function showReplyPreview() {
   const preview = $("replyPreview");
@@ -263,6 +293,12 @@ function listenMessages() {
   }, error => { $("messages").textContent = "Não foi possível carregar as mensagens. Verifique as regras do Firestore."; });
 }
 $("messageSearch")?.addEventListener("input", renderMessages);
+$("favoritesToggle")?.addEventListener("click", () => {
+  showOnlyFavorites = !showOnlyFavorites;
+  $("favoritesToggle").textContent = showOnlyFavorites ? "Ver conversa" : "★ Favoritas";
+  $("favoritesToggle").setAttribute("aria-pressed", String(showOnlyFavorites));
+  renderMessages();
+});
 
 const messagesBox = $("messages");
 const jumpButton = $("jumpToLatest");
