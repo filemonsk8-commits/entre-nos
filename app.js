@@ -164,6 +164,15 @@ function renderMessages() {
       String(d.senderName || d.senderEmail || "").toLocaleLowerCase("pt-BR").includes(term);
     return matchesSearch && (!showOnlyFavorites || favoriteIds.has(item.id));
   });
+  const count = $("messageCount");
+  if (count) {
+    const hasFilter = !!term || showOnlyFavorites;
+    count.textContent = hasFilter
+      ? `Mostrando ${filtered.length} de ${normalMessages.length}`
+      : `${normalMessages.length} ${normalMessages.length === 1 ? "mensagem" : "mensagens"}`;
+  }
+  const clearSearch = $("clearSearch");
+  if (clearSearch) clearSearch.classList.toggle("hidden", !term);
   box.innerHTML = "";
   if (!cachedMessages.length) {
     const empty = document.createElement("div"); empty.className = "empty";
@@ -293,6 +302,13 @@ function listenMessages() {
   }, error => { $("messages").textContent = "Não foi possível carregar as mensagens. Verifique as regras do Firestore."; });
 }
 $("messageSearch")?.addEventListener("input", renderMessages);
+$("clearSearch")?.addEventListener("click", () => {
+  const search = $("messageSearch");
+  if (!search) return;
+  search.value = "";
+  search.focus();
+  renderMessages();
+});
 $("favoritesToggle")?.addEventListener("click", () => {
   showOnlyFavorites = !showOnlyFavorites;
   $("favoritesToggle").textContent = showOnlyFavorites ? "Ver conversa" : "★ Favoritas";
@@ -328,6 +344,7 @@ function downloadConversation(format) {
       exportedAt: new Date().toISOString(),
       messages: messages.map(({id, data}) => ({
         id, text: String(data.text || ""),
+        favorite: favoriteIds.has(id),
         sender: data.senderName || data.senderEmail || "Entre Nós",
         senderUid: data.uid || null,
         createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : null,
