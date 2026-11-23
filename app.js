@@ -50,7 +50,9 @@ function listenMessages() {
       bubble.className = "bubble" + (data.uid === auth.currentUser?.uid ? " mine" : "");
       const body = document.createElement("div"); body.textContent = data.text || "";
       const meta = document.createElement("small"); meta.textContent = data.senderName || data.senderEmail || "Entre Nós";
-      bubble.append(body, meta); box.append(bubble);
+      const time = document.createElement("small");
+      if (data.createdAt?.toDate) time.textContent = data.createdAt.toDate().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      bubble.append(body, meta, time); box.append(bubble);
     });
     box.scrollTop = box.scrollHeight;
   }, error => { $("messages").textContent = "Não foi possível carregar as mensagens. Verifique as regras do Firestore."; });
