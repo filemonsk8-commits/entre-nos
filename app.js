@@ -221,6 +221,8 @@ function renderMessages() {
       reactionButton.setAttribute("aria-label", "Reagir com " + emoji);
       reactionButton.addEventListener("click", async () => {
         if (!source) return;
+        const alreadyReacted = cachedMessages.some(item => item.data.type === "reaction" && item.data.targetMessageId === source.id && item.data.emoji === emoji && item.data.uid === auth.currentUser.uid);
+        if (alreadyReacted) return;
         try {
           await addDoc(collection(db, "messages"), { type:"reaction", targetMessageId:source.id, emoji, uid:auth.currentUser.uid, senderName:auth.currentUser.email || "Entre Nós", createdAt:serverTimestamp() });
         } catch (error) { alert("Não foi possível registrar a reação. Confira as permissões do Firestore."); }
@@ -235,11 +237,16 @@ function renderMessages() {
 function showReplyPreview() {
   const preview = $("replyPreview");
   if (!preview) return;
-  if (!replyTarget) { preview.classList.add("hidden"); preview.textContent = ""; return; }
+  preview.innerHTML = "";
+  if (!replyTarget) { preview.classList.add("hidden"); return; }
   preview.classList.remove("hidden");
-  preview.textContent = "Respondendo a " + replyTarget.sender + ": " + replyTarget.text;
+  const label = document.createElement("span");
+  label.textContent = "Respondendo a " + replyTarget.sender + ": " + replyTarget.text;
+  const cancel = document.createElement("button");
+  cancel.type = "button"; cancel.className = "message-action"; cancel.textContent = "Cancelar";
+  cancel.addEventListener("click", () => { replyTarget = null; showReplyPreview(); });
+  preview.append(label, cancel);
 }
-$("cancelReply")?.addEventListener("click", () => { replyTarget = null; showReplyPreview(); });
 
 function listenMessages() {
   if (stopMessages) stopMessages();
