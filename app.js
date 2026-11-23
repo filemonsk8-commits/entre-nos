@@ -205,6 +205,19 @@ function listenMessages() {
 }
 $("messageSearch")?.addEventListener("input", renderMessages);
 
+const messagesBox = $("messages");
+const jumpButton = $("jumpToLatest");
+if (messagesBox && jumpButton) {
+  messagesBox.addEventListener("scroll", () => {
+    const away = messagesBox.scrollHeight - messagesBox.scrollTop - messagesBox.clientHeight > 140;
+    jumpButton.classList.toggle("hidden", !away);
+  });
+  jumpButton.addEventListener("click", () => {
+    messagesBox.scrollTo({ top: messagesBox.scrollHeight, behavior: "smooth" });
+    jumpButton.classList.add("hidden");
+  });
+}
+
 $("exportConversation")?.addEventListener("click", () => {
   if (!cachedMessages.length) {
     alert("Ainda não há mensagens para exportar.");
