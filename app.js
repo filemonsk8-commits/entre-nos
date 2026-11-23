@@ -156,7 +156,19 @@ function renderMessages() {
     const meta = document.createElement("small"); meta.textContent = data.senderName || data.senderEmail || "Entre Nós";
     const time = document.createElement("small");
     if (data.createdAt?.toDate) time.textContent = data.createdAt.toDate().toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
-    bubble.append(body, meta, time); box.append(bubble);
+    const copy = document.createElement("button");
+    copy.type = "button"; copy.className = "copy-message"; copy.textContent = "Copiar";
+    copy.setAttribute("aria-label", "Copiar esta mensagem");
+    copy.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(data.text || "");
+        copy.textContent = "Copiado ✓";
+        setTimeout(() => { copy.textContent = "Copiar"; }, 1600);
+      } catch {
+        copy.textContent = "Não foi possível copiar";
+      }
+    });
+    bubble.append(body, meta, time, copy); box.append(bubble);
   });
   if (!term) box.scrollTop = box.scrollHeight;
 }
