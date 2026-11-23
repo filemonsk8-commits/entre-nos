@@ -581,19 +581,34 @@ $("messageForm").addEventListener("submit", async event => {
 });
 
 function draftKey(user) { return "entre-nos-draft-" + user.uid; }
+function setDraftStatus(message, state = "saved") {
+  const status = $("draftStatus");
+  if (!status) return;
+  status.textContent = message;
+  status.dataset.state = state;
+}
 function saveDraft(user, value) {
-  if (!user) return;
-  try { localStorage.setItem(draftKey(user), value); } catch {}
+  if (!user) return false;
+  try {
+    localStorage.setItem(draftKey(user), value);
+    setDraftStatus(value ? "Rascunho salvo neste aparelho" : "Nenhum rascunho pendente", "saved");
+    return true;
+  } catch {
+    setDraftStatus("Não foi possível salvar o rascunho neste aparelho", "error");
+    return false;
+  }
 }
 function restoreDraft(user) {
   const input = $("messageInput");
   try { input.value = localStorage.getItem(draftKey(user)) || ""; } catch { input.value = ""; }
+  setDraftStatus(input.value ? "Rascunho recuperado neste aparelho" : "Rascunhos são salvos automaticamente neste aparelho", "saved");
   updateDraftCounter();
   resizeComposer();
 }
 function updateDraftCounter() {
-  const counter = $("draftCounter"), input = $("messageInput");
+  const counter = $("draftCounter"), input = $("messageInput"), clear = $("clearDraft");
   if (counter && input) counter.textContent = input.value.length.toLocaleString("pt-BR") + "/4000";
+  if (clear && input) clear.classList.toggle("hidden", !input.value.length);
 }
 function resizeComposer() {
   const input = $("messageInput");
@@ -605,6 +620,22 @@ $("messageInput")?.addEventListener("input", () => {
   if (auth?.currentUser) saveDraft(auth.currentUser, $("messageInput").value);
   updateDraftCounter();
   resizeComposer();
+});
+$("clearDraft")?.addEventListener("click", () => {
+  const user = auth?.currentUser, input = $("messageInput");
+  if (!user || !input) return;
+  if (input.value && !window.confirm("Limpar o texto que ainda não foi enviado?")) return;
+  input.value = "";
+  saveDraft(user, "");
+  updateDraftCounter();
+  resizeComposer();
+  input.focus();
+});
+window.addEventListener("pagehide", () => {
+  const user = auth?.currentUser, input = $("messageInput");
+  if (user && input && input.value) {
+    try { localStorage.setItem(draftKey(user), input.value); } catch {}
+  }
 });
 $("messageInput")?.addEventListener("keydown", event => {
   if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
