@@ -205,6 +205,30 @@ function listenMessages() {
 }
 $("messageSearch")?.addEventListener("input", renderMessages);
 
+$("exportConversation")?.addEventListener("click", () => {
+  if (!cachedMessages.length) {
+    alert("Ainda não há mensagens para exportar.");
+    return;
+  }
+  const lines = ["ENTRE NÓS — CÓPIA DA CONVERSA", "Exportado em: " + new Date().toLocaleString("pt-BR"), ""];
+  cachedMessages.forEach(({data}) => {
+    const date = data.createdAt?.toDate ? data.createdAt.toDate().toLocaleString("pt-BR") : "Data não disponível";
+    const sender = data.senderName || data.senderEmail || "Entre Nós";
+    lines.push("[" + date + "] " + sender + ":");
+    lines.push(String(data.text || ""));
+    lines.push("");
+  });
+  const blob = new Blob(["\\uFEFF" + lines.join("\\n")], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "entre-nos-conversa-" + new Date().toISOString().slice(0,10) + ".txt";
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+
 function updateConnectionStatus() {
   const el = $("connectionStatus");
   if (!el) return;
