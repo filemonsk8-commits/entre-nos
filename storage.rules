@@ -1,0 +1,18 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isApproved() {
+      return request.auth != null && request.auth.uid in [
+        '7XPrjKOzd7czUWdFwPLdPI63Hwu2',
+        '3E0MnEx8kwclQ7sajJndriPJpZ62'
+      ];
+    }
+    match /conversation/{uid}/{fileName} {
+      allow read: if isApproved();
+      allow write: if isApproved()
+        && request.auth.uid == uid
+        && request.resource.size < 16 * 1024 * 1024
+        && request.resource.contentType.matches('(image/.*|audio/.*)');
+    }
+  }
+}
