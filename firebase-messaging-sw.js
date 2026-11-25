@@ -11,11 +11,11 @@ firebase.initializeApp({
 });
 
 const messaging = firebase.messaging();
-const SHELL_CACHE = "entre-nos-shell-v20";
+const SHELL_CACHE = "entre-nos-shell-v21";
 const APP_SHELL = [
   "./",
   "./index.html",
-  "./app.js?v=20",
+  "./app.js?v=22",
   "./firebase-config.js",
   "./manifest.webmanifest",
   "./icon.svg"
