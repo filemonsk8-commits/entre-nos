@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, doc, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-storage.js";
 import { getMessaging, getToken, onMessage, isSupported } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-messaging.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -10,7 +11,8 @@ const authView = $("authView"), chatView = $("chatView"), pendingView = $("pendi
 const approvedUids = ["7XPrjKOzd7czUWdFwPLdPI63Hwu2", "3E0MnEx8kwclQ7sajJndriPJpZ62"];
 const vapidKey = "BA1o3SI2iCWEiAqyOf8EjoX4bBVDQQdakDYhd8O_k99BpYH8dq-ogPwjmUGciSun5I2Jkeg7l-WOO2lU8bsgorc";
 let signupMode = false;
-let auth, db, stopMessages, messaging;
+let auth, db, storage, stopMessages, messaging;
+let mediaRecorder = null, recordingChunks = [], recordingStartedAt = 0;
 let soundEnabled = false, soundContext = null, initialMessagesLoaded = false;
 
 function loadSoundPreference(user) {
@@ -88,6 +90,7 @@ if (configured) {
   const app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
+  storage = getStorage(app);
   // Registra o service worker também quando o usuário ainda não ativou push.
   // Assim o shell do PWA pode ser atualizado e armazenado para abertura básica offline.
   if ("serviceWorker" in navigator) {
@@ -277,6 +280,20 @@ function renderMessages() {
       bubble.append(quote);
     }
     const body = document.createElement("div");
+    if (data.type === "image" && data.attachment?.url) {
+      const image = document.createElement("img");
+      image.src = data.attachment.url; image.alt = data.attachment.name || "Fotografia compartilhada";
+      image.loading = "lazy"; image.style.cssText = "display:block;max-width:100%;max-height:360px;border-radius:12px;object-fit:contain;margin-bottom:6px";
+      image.addEventListener("click", () => window.open(data.attachment.url, "_blank", "noopener"));
+      body.append(image);
+    } else if (data.type === "audio" && data.attachment?.url) {
+      const audio = document.createElement("audio"); audio.controls = true; audio.preload = "metadata"; audio.src = data.attachment.url; audio.style.cssText = "display:block;max-width:100%;width:260px;margin:5px 0"; body.append(audio);
+    } else if (data.type === "letter" || data.type === "memory") {
+      const note = document.createElement("div"); note.className = "special-note " + data.type;
+      const heading = document.createElement("strong"); heading.textContent = data.type === "letter" ? "✉ Carta especial" : "♡ Nossa lembrança";
+      const title = document.createElement("div"); title.className = "special-note-title"; title.textContent = data.title || (data.type === "letter" ? "Uma carta para você" : "Um momento nosso");
+      note.append(heading, title); body.append(note);
+    }
     const rawText = String(data.text || "");
     const urlPattern = /(https:\/\/[^\s]+|www\.[^\s]+)/gi;
     let lastIndex = 0, match;
@@ -289,6 +306,7 @@ function renderMessages() {
       body.append(anchor); lastIndex = urlPattern.lastIndex;
     }
     body.append(document.createTextNode(rawText.slice(lastIndex)));
+    if (data.type === "letter" || data.type === "memory") body.classList.add("special-note-body");
     const meta = document.createElement("small"); meta.textContent = displayName(data.uid);
     const time = document.createElement("small");
     if (data.createdAt?.toDate) time.textContent = data.createdAt.toDate().toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" });
@@ -560,6 +578,72 @@ function setSendStatus(message, state = "info") {
   status.textContent = message;
   status.dataset.state = state;
 }
+async function uploadAndSendMedia(file, kind) {
+  if (!auth?.currentUser || !file) return;
+  if (!navigator.onLine) { setSendStatus("Sem internet. Conecte-se para enviar o arquivo.", "warning"); return; }
+  const max = kind === "image" ? 8 * 1024 * 1024 : 15 * 1024 * 1024;
+  if (file.size > max) { alert(kind === "image" ? "A foto deve ter até 8 MB." : "O áudio deve ter até 15 MB."); return; }
+  const button = $("sendMediaPhoto"); if (button) button.disabled = true;
+  setSendStatus(kind === "image" ? "Enviando fotografia…" : "Enviando áudio…", "info");
+  try {
+    const safeName = (file.name || (kind === "image" ? "fotografia.jpg" : "mensagem-de-voz.webm")).replace(/[^a-zA-Z0-9._-]/g, "_");
+    const path = `conversation/${auth.currentUser.uid}/${Date.now()}-${safeName}`;
+    const target = storageRef(storage, path);
+    await uploadBytes(target, file, { contentType: file.type || (kind === "image" ? "image/jpeg" : "audio/webm") });
+    const url = await getDownloadURL(target);
+    await addDoc(collection(db, "messages"), {
+      type: kind, text: "", uid: auth.currentUser.uid, senderEmail: auth.currentUser.email || "",
+      senderName: displayName(auth.currentUser.uid), attachment: { url, path, name: safeName, contentType: file.type || "" }, createdAt: serverTimestamp()
+    });
+    setSendStatus(kind === "image" ? "Fotografia enviada." : "Áudio enviado.", "success");
+  } catch (error) {
+    console.warn("Falha ao enviar mídia:", error);
+    setSendStatus("Não foi possível enviar. Verifique as regras do Firebase Storage.", "error");
+  } finally { if (button) button.disabled = false; }
+}
+
+$("sendMediaPhoto")?.addEventListener("click", () => $("mediaPhotoInput")?.click());
+$("mediaPhotoInput")?.addEventListener("change", async event => {
+  const file = event.target.files?.[0];
+  if (file) await uploadAndSendMedia(file, "image");
+  event.target.value = "";
+});
+$("recordAudio")?.addEventListener("click", async () => {
+  const button = $("recordAudio");
+  if (mediaRecorder?.state === "recording") { mediaRecorder.stop(); return; }
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) { alert("Este navegador não permite gravar áudio. Tente pelo Chrome ou Safari atualizado."); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const preferred = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find(type => MediaRecorder.isTypeSupported(type));
+    mediaRecorder = new MediaRecorder(stream, preferred ? { mimeType: preferred } : undefined);
+    recordingChunks = []; recordingStartedAt = Date.now();
+    mediaRecorder.ondataavailable = event => { if (event.data.size) recordingChunks.push(event.data); };
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(track => track.stop());
+      button.textContent = "🎙 Gravar áudio"; button.classList.remove("recording");
+      const type = mediaRecorder.mimeType || "audio/webm";
+      const ext = type.includes("mp4") ? "m4a" : "webm";
+      const blob = new Blob(recordingChunks, { type });
+      if (blob.size) await uploadAndSendMedia(new File([blob], `mensagem-de-voz.${ext}`, { type }), "audio");
+      recordingChunks = []; mediaRecorder = null;
+    };
+    mediaRecorder.start(); button.textContent = "■ Parar gravação"; button.classList.add("recording");
+    setSendStatus("Gravando… toque em parar quando terminar.", "info");
+  } catch (error) { alert("Não foi possível acessar o microfone. Verifique a permissão do navegador."); }
+});
+function sendSpecialNote(type) {
+  const title = window.prompt(type === "letter" ? "Título da carta:" : "Nome desta lembrança:", type === "letter" ? "Para você, com carinho" : "Um momento especial");
+  if (title === null) return;
+  const text = window.prompt(type === "letter" ? "Escreva sua carta:" : "Conte essa lembrança:");
+  if (text === null || !text.trim()) return;
+  if (text.length > 4000 || title.length > 100) { alert("Use até 100 caracteres no título e 4.000 no texto."); return; }
+  addDoc(collection(db, "messages"), { type, title: title.trim(), text: text.trim(), uid: auth.currentUser.uid, senderEmail: auth.currentUser.email || "", senderName: displayName(auth.currentUser.uid), createdAt: serverTimestamp() })
+    .then(() => setSendStatus(type === "letter" ? "Carta enviada com carinho." : "Lembrança guardada na conversa.", "success"))
+    .catch(() => setSendStatus("Não foi possível salvar. Confira as permissões do Firestore.", "error"));
+}
+$("sendLetter")?.addEventListener("click", () => sendSpecialNote("letter"));
+$("saveMemory")?.addEventListener("click", () => sendSpecialNote("memory"));
+
 $("messageForm").addEventListener("submit", async event => {
   event.preventDefault();
   const input = $("messageInput");
